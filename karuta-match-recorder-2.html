@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>競技かるた 対戦記録</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+:root{
+  --paper:#EFE8D8;      /* 生成り */
+  --card:#FCFAF3;       /* 札の白 */
+  --sumi:#26221A;       /* 墨 */
+  --sumi-soft:#6E665A;
+  --tatami:#3D5A46;     /* 畳の緑 */
+  --tatami-deep:#2C4334;
+  --shu:#A63A28;        /* 朱 = 選手A */
+  --shu-bg:#F6E4DE;
+  --ai:#31517D;         /* 藍 = 選手B */
+  --ai-bg:#E1E8F2;
+  --line:#D8CFBB;
+  --danger:#8E2F1F;
+  --radius:10px;
+  --serif:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
+  --sans:"Hiragino Kaku Gothic ProN","Yu Gothic","Noto Sans JP",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html{font-size:16px;}
+body{
+  font-family:var(--sans);
+  background:var(--paper);
+  color:var(--sumi);
+  min-height:100vh;
+  background-image:repeating-linear-gradient(90deg,rgba(61,90,70,.035) 0 1px,transparent 1px 7px);
+}
+.app{max-width:520px;margin:0 auto;padding:0 12px 90px;}
+.screen{display:none;}
+.screen.active{display:block;}
+
+/* ---------- 共通部品 ---------- */
+.appbar{
+  display:flex;align-items:baseline;justify-content:space-between;
+  padding:14px 2px 10px;border-bottom:2px solid var(--tatami);margin-bottom:14px;
+}
+.appbar h1{font-family:var(--serif);font-size:1.25rem;letter-spacing:.14em;color:var(--tatami-deep);}
+.appbar .sub{font-size:.68rem;color:var(--sumi-soft);letter-spacing:.08em;}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px;box-shadow:0 1px 0 rgba(38,34,26,.05);}
+.panel h2{font-family:var(--serif);font-size:.95rem;letter-spacing:.12em;color:var(--tatami-deep);margin-bottom:10px;border-left:4px solid var(--tatami);padding-left:8px;}
+label.f{display:block;font-size:.75rem;color:var(--sumi-soft);margin:8px 0 3px;letter-spacing:.06em;}
+input[type=text],input[type=number]{
+  width:100%;padding:10px;font-size:1rem;border:1px solid var(--line);border-radius:8px;
+  background:#fff;color:var(--sumi);font-family:var(--sans);
+}
+input:focus{outline:2px solid var(--tatami);outline-offset:-1px;}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:12px 16px;font-size:1rem;border-radius:8px;border:1px solid var(--line);
+  background:#fff;color:var(--sumi);cursor:pointer;font-family:var(--sans);letter-spacing:.05em;
+}
+.btn:active{transform:translateY(1px);}
+.btn.primary{background:var(--tatami);border-color:var(--tatami);color:#fff;font-weight:600;}
+.btn.ghost{background:transparent;}
+.btn.danger{color:var(--danger);border-color:#D9B7AE;}
+.btn.block{width:100%;}
+.btn.big{padding:15px;font-size:1.05rem;}
+.btn[disabled]{opacity:.4;pointer-events:none;}
+.row{display:flex;gap:8px;}
+.row>*{flex:1;}
+
+/* セグメントボタン */
+.seg{display:grid;gap:6px;}
+.seg.c2{grid-template-columns:1fr 1fr;}
+.seg.c3{grid-template-columns:1fr 1fr 1fr;}
+.seg.c4{grid-template-columns:1fr 1fr 1fr 1fr;}
+.seg button{
+  padding:11px 4px;font-size:.9rem;border:1.5px solid var(--line);border-radius:8px;
+  background:#fff;color:var(--sumi);cursor:pointer;font-family:var(--sans);line-height:1.25;
+}
+.seg button.sel{border-color:var(--tatami);background:var(--tatami);color:#fff;font-weight:600;}
+.seg button.selA{border-color:var(--shu);background:var(--shu);color:#fff;font-weight:600;}
+.seg button.selB{border-color:var(--ai);background:var(--ai);color:#fff;font-weight:600;}
+.seg button[disabled]{opacity:.35;pointer-events:none;}
+.seg button small{display:block;font-size:.65rem;font-weight:400;opacity:.85;}
+
+/* ---------- 対戦ヘッダー ---------- */
+.scoreboard{
+  position:sticky;top:0;z-index:20;background:var(--tatami-deep);color:#fff;
+  border-radius:0 0 12px 12px;padding:10px 10px 12px;margin:0 -12px 12px;
+  box-shadow:0 2px 8px rgba(38,34,26,.25);
+}
+.scoreboard .names{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;}
+.pcell{text-align:center;border-radius:8px;padding:6px 4px;}
+.pcell.A{background:rgba(166,58,40,.35);}
+.pcell.B{background:rgba(49,81,125,.4);}
+.pcell .pname{font-family:var(--serif);font-size:.95rem;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pcell .pkai{font-size:.62rem;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pcell .prem{font-size:2rem;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;}
+.pcell .prem small{font-size:.65rem;font-weight:400;opacity:.8;margin-left:2px;}
+.pcell .editrem{
+  font-size:.62rem;background:rgba(255,255,255,.16);border:none;color:#fff;border-radius:5px;
+  padding:3px 8px;margin-top:3px;cursor:pointer;
+}
+.vs{font-family:var(--serif);opacity:.7;font-size:.8rem;text-align:center;}
+.readno{text-align:center;font-size:.7rem;opacity:.85;margin-top:6px;letter-spacing:.15em;}
+
+/* 現在の札（取札風・縦書き） */
+.fudawrap{display:flex;gap:12px;align-items:stretch;}
+.torifuda{
+  writing-mode:vertical-rl;font-family:var(--serif);
+  background:#FBF7EA;border:1.5px solid #C9BC9C;border-radius:6px;
+  min-width:74px;min-height:120px;padding:10px 8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.5rem;letter-spacing:.24em;color:var(--sumi);
+  box-shadow:2px 2px 0 rgba(38,34,26,.12);
+}
+.torifuda.empty{color:#B9AE95;font-size:.85rem;letter-spacing:.3em;}
+.fudaright{flex:1;}
+
+.hint{font-size:.72rem;color:var(--sumi-soft);margin-top:5px;line-height:1.5;}
+.warn{font-size:.75rem;color:var(--danger);margin-top:6px;line-height:1.5;}
+.preview{
+  margin-top:10px;padding:9px 10px;border-radius:8px;background:#F3EDDD;
+  font-size:.85rem;display:flex;justify-content:space-between;align-items:center;gap:8px;
+}
+.preview b{font-variant-numeric:tabular-nums;}
+.tagA{color:var(--shu);font-weight:700;}
+.tagB{color:var(--ai);font-weight:700;}
+
+/* 履歴 */
+.histitem{
+  display:grid;grid-template-columns:34px 1fr auto;gap:8px;align-items:center;
+  padding:8px 4px;border-bottom:1px dashed var(--line);font-size:.82rem;
+}
+.histitem:last-child{border-bottom:none;}
+.histno{font-family:var(--serif);color:var(--sumi-soft);text-align:center;}
+.histmain{line-height:1.45;}
+.histcnt{font-variant-numeric:tabular-nums;color:var(--sumi-soft);font-size:.78rem;white-space:nowrap;}
+.badge{display:inline-block;font-size:.68rem;border-radius:4px;padding:1px 6px;margin-left:4px;vertical-align:1px;}
+.badge.A{background:var(--shu-bg);color:var(--shu);}
+.badge.B{background:var(--ai-bg);color:var(--ai);}
+.badge.k{background:#E8E2D2;color:var(--sumi-soft);}
+.badge.te{background:#F4DED9;color:var(--danger);}
+
+/* 結果テーブル */
+.capture{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 14px;}
+.capture .ctitle{font-family:var(--serif);text-align:center;font-size:1.1rem;letter-spacing:.2em;color:var(--tatami-deep);}
+.capture .cdate{text-align:center;font-size:.7rem;color:var(--sumi-soft);margin-top:2px;}
+.resultline{
+  display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;margin:12px 0;
+  text-align:center;
+}
+.resultline .rp{font-family:var(--serif);}
+.resultline .rp .n{font-size:1.05rem;}
+.resultline .rp .k{font-size:.66rem;color:var(--sumi-soft);}
+.resultline .score{font-family:var(--serif);font-size:1.15rem;letter-spacing:.1em;white-space:nowrap;}
+.winmark{font-size:.7rem;color:#fff;background:var(--shu);border-radius:4px;padding:1px 7px;display:inline-block;margin-bottom:3px;}
+table.rec{width:100%;border-collapse:collapse;font-size:.74rem;margin-top:10px;}
+table.rec th,table.rec td{border:1px solid var(--line);padding:4px 3px;text-align:center;}
+table.rec th{background:#EEE7D4;font-weight:600;color:var(--tatami-deep);letter-spacing:.05em;}
+table.rec td.fud{font-family:var(--serif);}
+table.rec tr.zA td{background:#FBF1EE;}
+table.rec tr.zB td{background:#EFF3F9;}
+.legend{font-size:.66rem;color:var(--sumi-soft);margin-top:8px;line-height:1.6;}
+
+/* モーダル */
+.modal-back{
+  position:fixed;inset:0;background:rgba(38,34,26,.5);display:none;
+  align-items:center;justify-content:center;z-index:100;padding:20px;
+}
+.modal-back.show{display:flex;}
+.modal{
+  background:var(--card);border-radius:12px;padding:18px;max-width:380px;width:100%;
+  box-shadow:0 8px 30px rgba(0,0,0,.3);
+}
+.modal p{font-size:.92rem;line-height:1.7;margin-bottom:14px;white-space:pre-line;}
+.modal .row{margin-top:6px;}
+.modal input{margin-bottom:12px;}
+
+.footbar{
+  position:fixed;bottom:0;left:0;right:0;z-index:30;
+  background:linear-gradient(to top,var(--paper) 70%,transparent);
+  padding:10px 12px 14px;display:none;
+}
+.footbar.show{display:block;}
+.footbar .inner{max-width:520px;margin:0 auto;display:flex;gap:8px;}
+.imgout{margin-top:12px;text-align:center;}
+.imgout img{max-width:100%;border:1px solid var(--line);border-radius:8px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ================= 設定画面 ================= -->
+  <section id="scr-setup" class="screen active">
+    <div class="appbar">
+      <h1>競技かるた 対戦記録</h1>
+      <span class="sub">全日本かるた協会 競技規程準拠</span>
+    </div>
+
+    <div class="panel">
+      <h2>選手A（朱）</h2>
+      <label class="f">名前</label>
+      <input type="text" id="in-nameA" placeholder="例：綾瀬 千早">
+      <label class="f">所属会</label>
+      <input type="text" id="in-kaiA" placeholder="例：白波会">
+      <label class="f">自陣の枚数（基本は25）</label>
+      <input type="number" id="in-remA" value="25" min="0" max="50" inputmode="numeric">
+    </div>
+
+    <div class="panel">
+      <h2>選手B（藍）</h2>
+      <label class="f">名前</label>
+      <input type="text" id="in-nameB" placeholder="例：若宮 詩暢">
+      <label class="f">所属会</label>
+      <input type="text" id="in-kaiB" placeholder="例：伏見会">
+      <label class="f">自陣の枚数（基本は25）</label>
+      <input type="number" id="in-remB" value="25" min="0" max="50" inputmode="numeric">
+    </div>
+
+    <button class="btn primary block big" id="btn-start">試合を開始する</button>
+    <p class="hint" style="margin-top:10px">
+      ハンデ戦などの場合は枚数を変更してください。記録はこの画面に戻ると消去されます。
+    </p>
+  </section>
+
+  <!-- ================= 記録画面 ================= -->
+  <section id="scr-match" class="screen">
+    <div class="scoreboard">
+      <div class="names">
+        <div class="pcell A">
+          <div class="pname" id="sb-nameA">A</div>
+          <div class="pkai" id="sb-kaiA"></div>
+          <div class="prem"><span id="sb-remA">25</span><small>枚</small></div>
+          <button class="editrem" data-p="A">枚数を直接修正</button>
+        </div>
+        <div class="vs">対<br>戦</div>
+        <div class="pcell B">
+          <div class="pname" id="sb-nameB">B</div>
+          <div class="pkai" id="sb-kaiB"></div>
+          <div class="prem"><span id="sb-remB">25</span><small>枚</small></div>
+          <button class="editrem" data-p="B">枚数を直接修正</button>
+        </div>
+      </div>
+      <div class="readno" id="sb-readno">1 枚目</div>
+    </div>
+
+    <div class="panel">
+      <h2 id="fm-title">1枚目の記録</h2>
+      <div class="fudawrap">
+        <div class="torifuda empty" id="fudacard">札名未入力</div>
+        <div class="fudaright">
+          <label class="f">読まれた札（決まり字・任意）</label>
+          <input type="text" id="fm-fuda" list="kimariji" placeholder="例：ちは" autocomplete="off">
+          <p class="hint">決まり字で入力できます（空欄でも可）。</p>
+        </div>
+      </div>
+      <datalist id="kimariji"></datalist>
+
+      <label class="f">出札はどちらの陣にあったか</label>
+      <div class="seg c4" id="fm-dedokoro">
+        <button data-v="A">A陣<small id="dnA">選手A</small></button>
+        <button data-v="B">B陣<small id="dnB">選手B</small></button>
+        <button data-v="kara">空札</button>
+        <button data-v="">不明</button>
+      </div>
+
+      <label class="f">どちらが取ったか</label>
+      <div class="seg c3" id="fm-taker">
+        <button data-v="A" id="tkA">A<small id="tkAsub"></small></button>
+        <button data-v="B" id="tkB">B<small id="tkBsub"></small></button>
+        <button data-v="">なし・不明</button>
+      </div>
+
+      <label class="f">お手つき（選手A）</label>
+      <div class="seg c3" id="fm-teA">
+        <button data-v="0">なし</button>
+        <button data-v="1">お手つき</button>
+        <button data-v="2" id="teA2">両陣<small>空札時のみ</small></button>
+      </div>
+
+      <label class="f">お手つき（選手B）</label>
+      <div class="seg c3" id="fm-teB">
+        <button data-v="0">なし</button>
+        <button data-v="1">お手つき</button>
+        <button data-v="2" id="teB2">両陣<small>空札時のみ</small></button>
+      </div>
+
+      <div class="preview" id="fm-preview"></div>
+      <p class="hint" id="fm-note"></p>
+
+    </div>
+
+    <div class="panel">
+      <h2>これまでの記録</h2>
+      <div id="histlist"><p class="hint">まだ記録はありません。</p></div>
+    </div>
+
+    <div class="row" style="margin-top:20px">
+      <button class="btn danger" id="btn-home1">ホームに戻る</button>
+      <button class="btn" id="btn-finish" style="flex:2">試合終了 → 結果入力</button>
+    </div>
+    <p class="hint" style="margin-top:6px;text-align:center">試合終了は誤操作防止のため、ここ（記録一覧の下）にあります。</p>
+  </section>
+
+  <!-- ================= 結果画面 ================= -->
+  <section id="scr-result" class="screen">
+    <div class="appbar">
+      <h1>試合結果</h1>
+      <span class="sub" id="res-sub"></span>
+    </div>
+
+    <div class="panel">
+      <h2>決着の入力</h2>
+      <label class="f">どちらが勝ったか</label>
+      <div class="seg c2" id="res-winner">
+        <button data-v="A" id="rwA">A</button>
+        <button data-v="B" id="rwB">B</button>
+      </div>
+      <label class="f">枚数（勝敗差＝敗者の残り枚数）</label>
+      <input type="number" id="res-maisu" min="1" max="50" inputmode="numeric">
+      <p class="hint">通常は敗者の自陣に残った枚数を入力します（例：「3枚勝ち」なら 3）。</p>
+      <button class="btn primary block" id="btn-make-sheet" style="margin-top:12px">記録一覧を作成する</button>
+    </div>
+
+    <div id="sheetarea" style="display:none">
+      <div class="capture" id="capture"></div>
+      <button class="btn primary block big" id="btn-save-img" style="margin-top:12px">📷 画像を作成する</button>
+      <div class="row" id="saverow" style="display:none;margin-top:8px">
+        <button class="btn" id="btn-dl-img">⬇ ダウンロード</button>
+        <button class="btn" id="btn-share-img">📤 共有して保存</button>
+      </div>
+      <div class="imgout" id="imgout"></div>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="btn-back-match">◀ 記録画面に戻る</button>
+      <button class="btn danger" id="btn-home2">ホーム画面に戻る</button>
+    </div>
+  </section>
+
+</div>
+
+<!-- 記録画面のフッター：常に手元にあるのは記録操作のみ -->
+<div class="footbar" id="footbar">
+  <div class="inner">
+    <button class="btn" id="btn-back-card">◀ 前の札</button>
+    <button class="btn primary big" id="btn-record" style="flex:2">記録して次の札へ ▶</button>
+  </div>
+</div>
+
+<!-- 汎用モーダル -->
+<div class="modal-back" id="modal-back">
+  <div class="modal">
+    <p id="modal-text"></p>
+    <input type="number" id="modal-num" style="display:none" inputmode="numeric">
+    <div class="row">
+      <button class="btn" id="modal-cancel">キャンセル</button>
+      <button class="btn primary" id="modal-ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =========================================================
+ * 競技かるた対戦記録アプリ
+ * 枚数計算は（一社）全日本かるた協会 競技規程 第十六条・
+ * 競技規程細則 第二十五条（送り札）に準拠：
+ *  ・敵陣の出札を取った場合 → 1枚送る
+ *  ・対戦者がお手つきをした場合 → 1枚送る
+ *  ・敵陣の出札を取り、かつ対戦者がお手つき → 2枚送る
+ *  ・空札時に対戦者が両陣お手つき → 2枚送る
+ *  ・双方が送る権利を持つ場合は差し引いた枚数のみ送る（相殺）
+ * ========================================================= */
+
+/* ---------- 決まり字一覧（百人一首100首） ---------- */
+const KIMARIJI = [
+  ["さ","さびしさに"],["す","すみのえの"],["せ","せをはやみ"],["ふ","ふくからに"],
+  ["ほ","ほととぎす"],["む","むらさめの"],["め","めぐりあひて"],
+  ["あけ","あけぬれば"],["あし","あしびきの"],["あひ","あひみての"],["いに","いにしへの"],
+  ["うか","うかりける"],["うら","うらみわび"],["おく","おくやまに"],["をぐ","をぐらやま"],
+  ["おと","おとにきく"],["おも","おもひわび"],["かく","かくとだに"],["かさ","かささぎの"],
+  ["きり","きりぎりす"],["こぬ","こぬひとを"],["この","このたびは"],["こひ","こひすてふ"],
+  ["これ","これやこの"],["しの","しのぶれど"],["しら","しらつゆに"],["たか","たかさごの"],
+  ["たき","たきのおとは"],["たご","たごのうらに"],["たち","たちわかれ"],["たま","たまのをよ"],
+  ["たれ","たれをかも"],["ちは","ちはやぶる"],["つき","つきみれば"],["つく","つくばねの"],
+  ["なつ","なつのよは"],["ひさ","ひさかたの"],["みせ","みせばやな"],["みち","みちのくの"],
+  ["みよ","みよしのの"],["もも","ももしきや"],["もろ","もろともに"],["やす","やすらはで"],
+  ["やへ","やへむぐら"],["ゆふ","ゆふされば"],["ゆら","ゆらのとを"],["よも","よもすがら"],
+  ["よを","よをこめて"],["わび","わびぬれば"],
+  ["あきか","あきかぜに"],["あきの","あきのたの"],["あさぢ","あさぢふの"],["あはぢ","あはぢしま"],
+  ["あはれ","あはれとも"],["あふこ","あふことの"],["あまつ","あまつかぜ"],["あまの","あまのはら"],
+  ["あらざ","あらざらむ"],["あらし","あらしふく"],["ありあ","ありあけの"],["ありま","ありまやま"],
+  ["いまこ","いまこむと"],["いまは","いまはただ"],["おほえ","おほえやま"],["おほけ","おほけなく"],
+  ["かぜそ","かぜそよぐ"],["かぜを","かぜをいたみ"],["ながか","ながからむ"],["ながら","ながらへば"],
+  ["なげき","なげきつつ"],["なげけ","なげけとて"],["なにし","なにしおはば"],["はなさ","はなさそふ"],
+  ["はなの","はなのいろは"],["はるす","はるすぎて"],["はるの","はるのよの"],["ひとは","ひとはいさ"],
+  ["ひとも","ひともをし"],["みかき","みかきもり"],["みかの","みかのはら"],["やまが","やまがはに"],
+  ["やまざ","やまざとは"],["わがい","わがいほは"],["わがそ","わがそでは"],["わすら","わすらるる"],
+  ["わすれ","わすれじの"],
+  ["こころあ","こころあてに"],["こころに","こころにも"],["ちぎりお","ちぎりおきし"],
+  ["ちぎりき","ちぎりきな"],["なにはえ","なにはえの"],["なにはが","なにはがた"],
+  ["よのなかは","よのなかは"],["よのなかよ","よのなかよ"],
+  ["あさぼらけあ","あさぼらけありあけの"],["あさぼらけう","あさぼらけうぢの"],
+  ["きみがためは","きみがためはるの"],["きみがためを","きみがためをしから"],
+  ["わたのはらこ","わたのはらこぎいでて"],["わたのはらや","わたのはらやそしま"]
+];
+
+/* ---------- 状態 ---------- */
+const S = {
+  players: { A:{name:"選手A",kai:""}, B:{name:"選手B",kai:""} },
+  init: { A:25, B:25 },
+  rem:  { A:25, B:25 },
+  records: [],           // {no,fuda,dedokoro,taker,teA,teB,before:{A,B},after:{A,B}}
+  form: { fuda:"", dedokoro:null, taker:null, teA:0, teB:0 },
+  result: { winner:null, maisu:null }
+};
+
+const $ = id => document.getElementById(id);
+
+/* ---------- 枚数計算（規程準拠の核心ロジック） ---------- */
+function applyRecord(rec, a, b){
+  const notes = [];
+  // 1) 出札は場から取り除かれる → その陣の持札が1枚減る
+  if(rec.dedokoro === "A")      a--;
+  else if(rec.dedokoro === "B") b--;
+  else if(rec.dedokoro === "" && rec.taker === "A") { a--; notes.push("出札不明：取り手Aの持札を1枚減として計算"); }
+  else if(rec.dedokoro === "" && rec.taker === "B") { b--; notes.push("出札不明：取り手Bの持札を1枚減として計算"); }
+  // ※出札の陣が不明でも取り手が判れば正味の増減は同じ
+  //  （守り：自陣-1／抜き：敵陣-1＋送り札で自陣-1・敵陣+1 → いずれも取り手-1）
+
+  // 2) 送り札の権利数（規程第十六条・細則第二十五条）
+  let sendA = 0, sendB = 0;
+  if(rec.taker === "A" && rec.dedokoro === "B") sendA++;   // Aが敵陣を抜いた
+  if(rec.taker === "B" && rec.dedokoro === "A") sendB++;   // Bが敵陣を抜いた
+  sendA += rec.teB;   // Bのお手つき（両陣なら2）
+  sendB += rec.teA;   // Aのお手つき（両陣なら2）
+
+  // 3) 双方に権利がある場合は差し引き（細則第二十五条 四）
+  const net = sendA - sendB;
+  if(net > 0){ a -= net; b += net; }
+  else if(net < 0){ b -= (-net); a += (-net); }
+
+  if(a < 0){ notes.push("Aの枚数が0未満になるため0に補正しました"); a = 0; }
+  if(b < 0){ notes.push("Bの枚数が0未満になるため0に補正しました"); b = 0; }
+  return { A:a, B:b, notes };
+}
+
+/* ---------- 画面切替 ---------- */
+function show(id){
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+  $(id).classList.add("active");
+  $("footbar").classList.toggle("show", id==="scr-match");
+  window.scrollTo(0,0);
+}
+
+/* ---------- モーダル ---------- */
+let modalCb = null;
+function askConfirm(text, cb){
+  $("modal-text").textContent = text;
+  $("modal-num").style.display = "none";
+  modalCb = ()=>cb(true);
+  $("modal-back").classList.add("show");
+}
+function askNumber(text, initVal, cb){
+  $("modal-text").textContent = text;
+  const n = $("modal-num");
+  n.style.display = "block";
+  n.value = initVal;
+  modalCb = ()=>{
+    const v = parseInt(n.value,10);
+    if(!isNaN(v) && v>=0 && v<=50) cb(v);
+  };
+  $("modal-back").classList.add("show");
+  setTimeout(()=>n.focus(),50);
+}
+$("modal-ok").onclick = ()=>{ $("modal-back").classList.remove("show"); if(modalCb) modalCb(); };
+$("modal-cancel").onclick = ()=>{ $("modal-back").classList.remove("show"); modalCb=null; };
+
+/* ---------- 設定画面 ---------- */
+function buildDatalist(){
+  const dl = $("kimariji");
+  KIMARIJI.forEach(([k,u])=>{
+    const o = document.createElement("option");
+    o.value = k; o.label = u;
+    dl.appendChild(o);
+  });
+}
+buildDatalist();
+
+$("btn-start").onclick = ()=>{
+  S.players.A.name = $("in-nameA").value.trim() || "選手A";
+  S.players.A.kai  = $("in-kaiA").value.trim();
+  S.players.B.name = $("in-nameB").value.trim() || "選手B";
+  S.players.B.kai  = $("in-kaiB").value.trim();
+  const ra = parseInt($("in-remA").value,10);
+  const rb = parseInt($("in-remB").value,10);
+  S.init.A = (isNaN(ra)||ra<0) ? 25 : ra;
+  S.init.B = (isNaN(rb)||rb<0) ? 25 : rb;
+  S.rem = { A:S.init.A, B:S.init.B };
+  S.records = [];
+  resetForm();
+  S.result = { winner:null, maisu:null };
+  refreshMatch();
+  show("scr-match");
+};
+
+/* ---------- 記録フォーム ---------- */
+function resetForm(){
+  S.form = { fuda:"", dedokoro:null, taker:null, teA:0, teB:0 };
+}
+function segSync(containerId, val, colorByPlayer){
+  const c = $(containerId);
+  c.querySelectorAll("button").forEach(btn=>{
+    btn.classList.remove("sel","selA","selB");
+    const match = (val!==null && btn.dataset.v === String(val));
+    if(match){
+      if(colorByPlayer && btn.dataset.v==="A") btn.classList.add("selA");
+      else if(colorByPlayer && btn.dataset.v==="B") btn.classList.add("selB");
+      else btn.classList.add("sel");
+    }
+  });
+}
+function bindSeg(containerId, handler){
+  $(containerId).querySelectorAll("button").forEach(btn=>{
+    btn.onclick = ()=>handler(btn.dataset.v);
+  });
+}
+bindSeg("fm-dedokoro", v=>{
+  S.form.dedokoro = v;
+  if(v==="kara"){ S.form.taker = ""; }               // 空札に取りはない
+  if(v!=="kara"){                                     // 両陣お手つきは空札時のみ
+    if(S.form.teA===2) S.form.teA=1;
+    if(S.form.teB===2) S.form.teB=1;
+  }
+  refreshForm();
+});
+bindSeg("fm-taker", v=>{ S.form.taker = v; refreshForm(); });
+bindSeg("fm-teA", v=>{ S.form.teA = parseInt(v,10); refreshForm(); });
+bindSeg("fm-teB", v=>{ S.form.teB = parseInt(v,10); refreshForm(); });
+$("fm-fuda").addEventListener("input", e=>{ S.form.fuda = e.target.value; refreshForm(); });
+
+function dedokoroLabel(v){
+  if(v==="A") return S.players.A.name+"の陣";
+  if(v==="B") return S.players.B.name+"の陣";
+  if(v==="kara") return "空札";
+  return "不明";
+}
+function takerLabel(v){
+  if(v==="A") return S.players.A.name;
+  if(v==="B") return S.players.B.name;
+  return "なし・不明";
+}
+function teLabel(rec){
+  const parts = [];
+  if(rec.teA===1) parts.push("A");
+  if(rec.teA===2) parts.push("A(両陣)");
+  if(rec.teB===1) parts.push("B");
+  if(rec.teB===2) parts.push("B(両陣)");
+  return parts.length ? parts.join("・") : "";
+}
+
+function refreshForm(){
+  const f = S.form;
+  $("fm-fuda").value = f.fuda;
+  const card = $("fudacard");
+  if(f.fuda){ card.textContent = f.fuda; card.classList.remove("empty"); }
+  else { card.textContent = "札名未入力"; card.classList.add("empty"); }
+
+  segSync("fm-dedokoro", f.dedokoro);
+  segSync("fm-taker", f.taker, true);
+  segSync("fm-teA", f.teA);
+  segSync("fm-teB", f.teB);
+
+  // 取りボタンの補足（守り/抜き）
+  const subA = $("tkAsub"), subB = $("tkBsub");
+  subA.textContent = f.dedokoro==="A" ? "自陣を守った" : f.dedokoro==="B" ? "敵陣を抜いた" : "";
+  subB.textContent = f.dedokoro==="B" ? "自陣を守った" : f.dedokoro==="A" ? "敵陣を抜いた" : "";
+  $("tkA").disabled = (f.dedokoro==="kara");
+  $("tkB").disabled = (f.dedokoro==="kara");
+  $("teA2").disabled = (f.dedokoro!=="kara");
+  $("teB2").disabled = (f.dedokoro!=="kara");
+
+  // プレビュー
+  const pv = $("fm-preview"), note = $("fm-note");
+  if(f.dedokoro===null){
+    pv.innerHTML = "出札の陣を選ぶと枚数の変化を試算します";
+    note.textContent = "";
+    return;
+  }
+  const rec = { dedokoro:f.dedokoro, taker:(f.taker===null?"":f.taker), teA:f.teA, teB:f.teB };
+  const r = applyRecord(rec, S.rem.A, S.rem.B);
+  pv.innerHTML =
+    'この記録後 → <b><span class="tagA">'+esc(S.players.A.name)+' '+r.A+'枚</span> ／ '+
+    '<span class="tagB">'+esc(S.players.B.name)+' '+r.B+'枚</span></b>';
+  let msg = r.notes.join("／");
+  if(f.dedokoro!=="kara" && f.dedokoro!=="" && (f.taker===null || f.taker==="")){
+    msg = (msg?msg+"／":"") + "取り手が「なし・不明」のため送り札は計算されません。必要なら枚数を直接修正できます";
+  }
+  if(f.dedokoro==="" && (f.taker===null || f.taker==="")){
+    msg = (msg?msg+"／":"") + "出札・取り手とも不明のため枚数は変化しません。ヘッダーの「枚数を直接修正」で帳尻を合わせられます";
+  }
+  note.textContent = msg;
+}
+
+/* ---------- 記録の確定・訂正 ---------- */
+$("btn-record").onclick = ()=>{
+  const f = S.form;
+  if(f.dedokoro===null){
+    askConfirm("出札の陣が未選択です。「不明」として記録しますか？", ()=>{ f.dedokoro=""; commitRecord(); });
+    return;
+  }
+  commitRecord();
+};
+function commitRecord(){
+  const f = S.form;
+  const rec = {
+    no: S.records.length+1,
+    fuda: f.fuda.trim(),
+    dedokoro: f.dedokoro===null ? "" : f.dedokoro,
+    taker: (f.taker===null || f.dedokoro==="kara") ? "" : f.taker,
+    teA: f.teA, teB: f.teB,
+    before: { A:S.rem.A, B:S.rem.B }
+  };
+  const r = applyRecord(rec, S.rem.A, S.rem.B);
+  rec.after = { A:r.A, B:r.B };
+  S.records.push(rec);
+  S.rem = { A:r.A, B:r.B };
+  resetForm();
+  refreshMatch();
+  if(S.rem.A===0 || S.rem.B===0){
+    askConfirm("自陣が0枚になりました。試合終了として結果入力に進みますか？\n（キャンセルで記録を続行できます）", goFinish);
+  }
+};
+
+$("btn-back-card").onclick = ()=>{
+  if(S.records.length===0){
+    askConfirm("まだ記録がありません。ホーム画面に戻りますか？\n（結果は保存されません）", ()=>show("scr-setup"));
+    return;
+  }
+  const last = S.records.pop();
+  S.rem = { A:last.before.A, B:last.before.B };   // 記録前の枚数に復元
+  S.form = { fuda:last.fuda, dedokoro:last.dedokoro, taker:(last.taker===""?null:last.taker), teA:last.teA, teB:last.teB };
+  if(last.dedokoro==="kara") S.form.taker = "";
+  refreshMatch();
+};
+
+/* ---------- 手動修正（帳尻合わせ） ---------- */
+document.querySelectorAll(".editrem").forEach(btn=>{
+  btn.onclick = ()=>{
+    const p = btn.dataset.p;
+    askNumber(S.players[p].name+" の残り枚数を入力してください（現在 "+S.rem[p]+" 枚）", S.rem[p], v=>{
+      S.rem[p] = v;
+      refreshMatch();
+    });
+  };
+});
+
+/* ---------- 記録画面の描画 ---------- */
+function esc(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+function refreshMatch(){
+  $("sb-nameA").textContent = S.players.A.name;
+  $("sb-nameB").textContent = S.players.B.name;
+  $("sb-kaiA").textContent = S.players.A.kai;
+  $("sb-kaiB").textContent = S.players.B.kai;
+  $("sb-remA").textContent = S.rem.A;
+  $("sb-remB").textContent = S.rem.B;
+  const no = S.records.length+1;
+  $("sb-readno").textContent = no+" 枚目";
+  $("fm-title").textContent = no+"枚目の記録";
+  $("dnA").textContent = S.players.A.name;
+  $("dnB").textContent = S.players.B.name;
+  $("tkA").firstChild.textContent = S.players.A.name;
+  $("tkB").firstChild.textContent = S.players.B.name;
+  refreshForm();
+  renderHist();
+}
+
+function recSummary(rec){
+  let s = '<span class="badge k">'+esc(dedokoroLabel(rec.dedokoro))+'</span>';
+  if(rec.taker==="A") s += '<span class="badge A">'+esc(S.players.A.name)+'が取り'+(rec.dedokoro==="B"?"（抜き）":rec.dedokoro==="A"?"（守り）":"")+'</span>';
+  else if(rec.taker==="B") s += '<span class="badge B">'+esc(S.players.B.name)+'が取り'+(rec.dedokoro==="A"?"（抜き）":rec.dedokoro==="B"?"（守り）":"")+'</span>';
+  const te = teLabel(rec);
+  if(te) s += '<span class="badge te">お手つき：'+esc(te)+'</span>';
+  return s;
+}
+
+function renderHist(){
+  const box = $("histlist");
+  if(S.records.length===0){ box.innerHTML = '<p class="hint">まだ記録はありません。</p>'; return; }
+  let html = "";
+  for(let i=S.records.length-1;i>=0;i--){
+    const r = S.records[i];
+    html += '<div class="histitem">'
+      + '<div class="histno">'+r.no+'</div>'
+      + '<div class="histmain">'
+      +   (r.fuda ? '<b style="font-family:var(--serif)">'+esc(r.fuda)+'</b> ' : '<span style="color:var(--sumi-soft)">（札名なし）</span> ')
+      +   recSummary(r)
+      + '</div>'
+      + '<div class="histcnt">'+r.after.A+'－'+r.after.B+'</div>'
+      + '</div>';
+  }
+  box.innerHTML = html;
+}
+
+/* ---------- 終了・結果 ---------- */
+function goFinish(){
+  $("rwA").textContent = S.players.A.name;
+  $("rwB").textContent = S.players.B.name;
+  // 既定値：0枚の方を勝者、枚数＝相手の残り
+  if(S.result.winner===null){
+    if(S.rem.A===0 && S.rem.B>0) S.result.winner="A";
+    else if(S.rem.B===0 && S.rem.A>0) S.result.winner="B";
+  }
+  if(S.result.winner){
+    const loser = S.result.winner==="A" ? "B" : "A";
+    if(!S.result.maisu) S.result.maisu = Math.max(S.rem[loser],1);
+  }
+  segSync("res-winner", S.result.winner, true);
+  $("res-maisu").value = S.result.maisu || "";
+  $("res-sub").textContent = S.records.length+"枚読了・現在 "+S.rem.A+"－"+S.rem.B;
+  $("sheetarea").style.display = "none";
+  $("saverow").style.display = "none";
+  $("imgout").innerHTML = "";
+  show("scr-result");
+}
+$("btn-finish").onclick = goFinish;
+
+bindSeg("res-winner", v=>{
+  S.result.winner = v;
+  const loser = v==="A" ? "B" : "A";
+  S.result.maisu = Math.max(S.rem[loser],1);
+  segSync("res-winner", v, true);
+  $("res-maisu").value = S.result.maisu;
+});
+$("res-maisu").addEventListener("input", e=>{
+  const v = parseInt(e.target.value,10);
+  S.result.maisu = isNaN(v)?null:v;
+});
+
+$("btn-make-sheet").onclick = ()=>{
+  if(!S.result.winner){ askConfirm("勝者が未選択です。選択してから作成してください。", ()=>{}); return; }
+  buildSheet();
+  $("saverow").style.display = "none";
+  $("imgout").innerHTML = "";
+  $("sheetarea").style.display = "block";
+  $("sheetarea").scrollIntoView({behavior:"smooth"});
+};
+
+function buildSheet(){
+  const w = S.result.winner, l = (w==="A"?"B":"A");
+  const maisu = S.result.maisu || "?";
+  const d = new Date();
+  const dateStr = d.getFullYear()+"年"+(d.getMonth()+1)+"月"+d.getDate()+"日";
+  const kai = p => S.players[p].kai ? '<div class="k">'+esc(S.players[p].kai)+'</div>' : "";
+
+  let rows = "";
+  S.records.forEach(r=>{
+    const zcls = r.dedokoro==="A" ? "zA" : r.dedokoro==="B" ? "zB" : "";
+    const dedo = r.dedokoro==="A" ? "A陣" : r.dedokoro==="B" ? "B陣" : r.dedokoro==="kara" ? "空札" : "－";
+    const take = r.taker==="A" ? "A"+(r.dedokoro==="B"?"（抜）":"（守）")
+               : r.taker==="B" ? "B"+(r.dedokoro==="A"?"（抜）":"（守）")
+               : (r.dedokoro==="kara" ? "" : "－");
+    const te = teLabel(r) || "";
+    rows += '<tr class="'+zcls+'">'
+      + '<td>'+r.no+'</td>'
+      + '<td class="fud">'+(r.fuda?esc(r.fuda):"－")+'</td>'
+      + '<td>'+dedo+'</td>'
+      + '<td>'+take+'</td>'
+      + '<td>'+te+'</td>'
+      + '<td>'+r.after.A+'－'+r.after.B+'</td>'
+      + '</tr>';
+  });
+
+  $("capture").innerHTML =
+    '<div class="ctitle">競技かるた 対戦記録</div>'
+    + '<div class="cdate">'+dateStr+'　'+S.records.length+'枚読了</div>'
+    + '<div class="resultline">'
+    +   '<div class="rp">'+(w==="A"?'<span class="winmark">勝</span><br>':'')
+    +     '<div class="n tagA">'+esc(S.players.A.name)+'</div>'+kai("A")+'</div>'
+    +   '<div class="score">'+esc(S.players[w].name)+'<br>'+maisu+'枚勝ち</div>'
+    +   '<div class="rp">'+(w==="B"?'<span class="winmark">勝</span><br>':'')
+    +     '<div class="n tagB">'+esc(S.players.B.name)+'</div>'+kai("B")+'</div>'
+    + '</div>'
+    + '<table class="rec"><thead><tr>'
+    + '<th>#</th><th>札</th><th>出札</th><th>取り</th><th>お手つき</th><th>残り(A－B)</th>'
+    + '</tr></thead><tbody>'+rows+'</tbody></table>'
+    + '<div class="legend">A＝'+esc(S.players.A.name)+'　B＝'+esc(S.players.B.name)
+    + '　／（抜）＝敵陣を取得　（守）＝自陣を取得　／「－」＝不明・記録なし'
+    + '　／ 初期枚数 '+S.init.A+'－'+S.init.B+'</div>';
+}
+
+/* ---------- 画像の作成と保存 ----------
+ * 生成（時間がかかる）と保存操作（タップ直後でないと失敗しやすい）を分離。
+ * 保存経路：①画像長押し ②Blob URLダウンロード ③共有シート（モバイル） */
+let savedBlob = null, savedUrl = null, savedFile = null;
+
+$("btn-save-img").onclick = async ()=>{
+  const el = $("capture");
+  const out = $("imgout");
+  if(typeof html2canvas === "undefined"){
+    out.innerHTML = '<p class="warn">画像化ライブラリを読み込めませんでした（通信環境をご確認ください）。この画面をそのまま端末のスクリーンショット機能で保存してください。</p>';
+    return;
+  }
+  out.innerHTML = '<p class="hint">画像を作成しています…</p>';
+  try{
+    const canvas = await html2canvas(el, {backgroundColor:"#FCFAF3", scale:2, useCORS:true});
+    savedBlob = await new Promise(res=>canvas.toBlob(res, "image/png"));
+    if(!savedBlob) throw new Error("toBlob failed");
+    if(savedUrl) URL.revokeObjectURL(savedUrl);
+    savedUrl = URL.createObjectURL(savedBlob);
+    const fname = "karuta_" + new Date().toISOString().slice(0,10).replace(/-/g,"") + ".png";
+    savedFile = new File([savedBlob], fname, {type:"image/png"});
+
+    out.innerHTML =
+      '<p class="hint" style="margin:8px 0 6px">✅ 画像を作成しました。<b>下の画像を長押し（PCは右クリック）して保存</b>するのが最も確実です。うまくいかない場合は上のボタンをお試しください。</p>'
+      + '<img src="'+savedUrl+'" alt="対戦記録">';
+    $("saverow").style.display = "flex";
+    // 共有シート非対応の環境ではボタンを隠す
+    $("btn-share-img").style.display =
+      (navigator.canShare && navigator.canShare({files:[savedFile]})) ? "" : "none";
+  }catch(e){
+    out.innerHTML = '<p class="warn">画像化に失敗しました。この画面をそのまま端末のスクリーンショット機能で保存してください。</p>';
+  }
+};
+
+$("btn-dl-img").onclick = ()=>{
+  if(!savedUrl) return;
+  const a = document.createElement("a");
+  a.href = savedUrl;
+  a.download = savedFile ? savedFile.name : "karuta.png";
+  document.body.appendChild(a); a.click(); a.remove();
+  const out = $("imgout");
+  if(!out.querySelector(".dlnote")){
+    out.insertAdjacentHTML("afterbegin",
+      '<p class="hint dlnote">ダウンロードが始まらない環境（アプリ内表示など）では、画像の長押し保存か「共有して保存」をご利用ください。</p>');
+  }
+};
+
+$("btn-share-img").onclick = async ()=>{
+  if(!savedFile) return;
+  try{
+    await navigator.share({files:[savedFile], title:"競技かるた対戦記録"});
+  }catch(e){ /* ユーザーによるキャンセル等は無視 */ }
+};
+
+$("btn-back-match").onclick = ()=>show("scr-match");
+
+/* ---------- ホームに戻る（確認あり） ---------- */
+function confirmHome(){
+  askConfirm("結果は保存されませんが本当に戻っていいですか？", ()=>show("scr-setup"));
+}
+$("btn-home1").onclick = confirmHome;
+$("btn-home2").onclick = confirmHome;
+
+refreshForm();
+</script>
+</body>
+</html>
